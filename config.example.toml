@@ -1,0 +1,28 @@
+# splunk-cli example configuration
+# Copy this file to ~/.config/splunk-cli/config.toml and fill in your values.
+# All settings can also be overridden via environment variables (SPLUNK_HOST, etc.)
+# or CLI flags.
+
+[splunk]
+# Splunk server URL including port (required)
+host = "https://your-splunk.example.com:8089"
+
+# Authentication: use either token (recommended) or user + password.
+token = ""
+# user     = ""
+# password = ""
+
+# App context for searches (optional, default: no app namespace)
+# app = "search"
+
+# Knowledge object owner (default: nobody)
+# owner = "nobody"
+
+# Skip TLS certificate verification — use only for self-signed certs in dev
+# insecure = false
+
+# Per-request HTTP timeout (default: 30s)
+# http_timeout = "30s"
+
+# Maximum results to return per run/results command (0 = all)
+# limit = 0

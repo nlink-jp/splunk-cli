@@ -1,45 +1,49 @@
 package cmd
 
 import (
-	"errors"
-	"flag"
+	"context"
 	"fmt"
 
-	"splunk_cli/splunk"
+	"github.com/spf13/cobra"
 )
 
-func startCmd(args []string, baseCfg splunk.Config) error {
-	fs := flag.NewFlagSet("start", flag.ExitOnError)
-	spl := fs.String("spl", "", "SPL query to execute")
-	file := fs.String("file", "", "Read SPL query from a file (use '-' for stdin)")
-	fs.StringVar(file, "f", "", "Shorthand for --file")
-	earliest := fs.String("earliest", "", "Search earliest time (e.g., -1h, @d, 1672531200)")
-	latest := fs.String("latest", "", "Search latest time (e.g., now, @d, 1672617600)")
-	silent := fs.Bool("silent", true, "Suppress progress messages")
-	addCommonFlags(fs, &baseCfg)
-	fs.Parse(args)
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start a SPL search asynchronously and print the SID",
+	RunE:  runStart,
+}
 
-	finalSpl, err := getSplQuery(*spl, *file)
+func init() {
+	rootCmd.AddCommand(startCmd)
+	f := startCmd.Flags()
+	f.String("spl", "", "SPL query to execute")
+	f.StringP("file", "f", "", "Read SPL from a file (use '-' for stdin)")
+	f.String("earliest", "", "Earliest time filter")
+	f.String("latest", "", "Latest time filter")
+	startCmd.MarkFlagsMutuallyExclusive("spl", "file")
+}
+
+func runStart(cmd *cobra.Command, _ []string) error {
+	spl, err := getSPL(cmd)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Host == "" {
-		return errors.New("--host is required")
+	if err := requireHost(); err != nil {
+		return err
 	}
-	if err := promptForCredentials(&baseCfg); err != nil {
+	if err := promptForCredentials(); err != nil {
 		return err
 	}
 
-	client, err := splunk.NewClient(&baseCfg, *silent)
+	earliest, _ := cmd.Flags().GetString("earliest")
+	latest, _ := cmd.Flags().GetString("latest")
+
+	c, err := newClient(true)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Debug {
-		printDebugConfig(&baseCfg, client.Log)
-	}
 
-	client.Log.Println("Connecting to Splunk and starting search job...")
-	sid, err := client.StartSearch(finalSpl, *earliest, *latest)
+	sid, err := c.StartSearch(context.Background(), spl, earliest, latest)
 	if err != nil {
 		return err
 	}

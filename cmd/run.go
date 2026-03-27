@@ -1,104 +1,137 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
-	"splunk_cli/splunk"
+	"github.com/spf13/cobra"
 )
 
-func runCmd(args []string, baseCfg splunk.Config) error {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	spl := fs.String("spl", "", "SPL query to execute")
-	file := fs.String("file", "", "Read SPL query from a file (use '-' for stdin)")
-	fs.StringVar(file, "f", "", "Shorthand for --file")
-	earliest := fs.String("earliest", "", "Search earliest time (e.g., -1h, @d, 1672531200)")
-	latest := fs.String("latest", "", "Search latest time (e.g., now, @d, 1672617600)")
-	timeout := fs.Duration("timeout", 10*time.Minute, "Total timeout for the run command")
-	silent := fs.Bool("silent", false, "Suppress progress messages")
-	addCommonFlags(fs, &baseCfg)
-	fs.Parse(args)
+var runCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Run a SPL search and print results (synchronous)",
+	Long: `Start a Splunk search, wait for it to complete, and print results as JSON.
 
-	finalSpl, err := getSplQuery(*spl, *file)
+Press Ctrl+C to cancel the job or detach and let it run in the background.`,
+	RunE: runRun,
+}
+
+func init() {
+	rootCmd.AddCommand(runCmd)
+	f := runCmd.Flags()
+	f.String("spl", "", "SPL query to execute")
+	f.StringP("file", "f", "", "Read SPL from a file (use '-' for stdin)")
+	f.String("earliest", "", "Earliest time filter (e.g. -1h, @d)")
+	f.String("latest", "", "Latest time filter (e.g. now, @d)")
+	f.Duration("timeout", 10*time.Minute, "Total timeout for the run command")
+	f.Bool("silent", false, "Suppress progress messages")
+	runCmd.MarkFlagsMutuallyExclusive("spl", "file")
+}
+
+func runRun(cmd *cobra.Command, _ []string) error {
+	spl, err := getSPL(cmd)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Host == "" {
-		return errors.New("--host is required")
+	if err := requireHost(); err != nil {
+		return err
 	}
-	if err := promptForCredentials(&baseCfg); err != nil {
+	if err := promptForCredentials(); err != nil {
 		return err
 	}
 
-	client, err := splunk.NewClient(&baseCfg, *silent)
+	earliest, _ := cmd.Flags().GetString("earliest")
+	latest, _ := cmd.Flags().GetString("latest")
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	silent, _ := cmd.Flags().GetBool("silent")
+
+	c, err := newClient(silent)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Debug {
-		printDebugConfig(&baseCfg, client.Log)
-	}
 
-	client.Log.Println("Connecting to Splunk and starting search job...")
-	sid, err := client.StartSearch(finalSpl, *earliest, *latest)
-	if err != nil {
-		return err
-	}
-	client.Log.Printf("Job started with SID: %s\n", sid)
-
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	c.Logf("Connecting to Splunk and starting search...\n")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	sigChan := make(chan os.Signal, 2)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- client.WaitForJob(ctx, sid)
-	}()
+	sid, err := c.StartSearch(ctx, spl, earliest, latest)
+	if err != nil {
+		return err
+	}
+	c.Logf("Job started: %s\n", sid)
+
+	// Wait for completion, handling Ctrl+C.
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	doneCh := make(chan error, 1)
+	go func() { doneCh <- c.WaitForJob(ctx, sid) }()
 
 	select {
-	case err := <-errChan:
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			return err
+	case waitErr := <-doneCh:
+		if waitErr != nil && !errors.Is(waitErr, context.Canceled) {
+			if errors.Is(waitErr, context.DeadlineExceeded) {
+				return fmt.Errorf("timed out after %v", timeout)
+			}
+			return waitErr
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("command timed out after %v", *timeout)
-		}
-	case <-sigChan:
-		signal.Stop(sigChan)
-		fmt.Fprintf(os.Stderr, "\n^C detected. What would you like to do?\n  (c)ancel the job on Splunk\n  (d)etach and let it run in the background\nChoice [c/d]: ")
+	case <-sigCh:
+		signal.Stop(sigCh)
+		fmt.Fprintln(os.Stderr, "\n^C detected. What would you like to do?")
+		fmt.Fprintln(os.Stderr, "  (c)ancel the job on Splunk")
+		fmt.Fprintln(os.Stderr, "  (d)etach and let it run in the background")
+		fmt.Fprint(os.Stderr, "Choice [c/d]: ")
 
-		choiceChan := make(chan string)
-		go func() {
-			choiceChan <- getChoiceFromTTY()
-		}()
+		choiceCh := make(chan string, 1)
+		go func() { choiceCh <- readFromTTY() }()
 
-		secondSigChan := make(chan os.Signal, 1)
-		signal.Notify(secondSigChan, syscall.SIGINT, syscall.SIGTERM)
-		defer signal.Stop(secondSigChan)
+		secondSig := make(chan os.Signal, 1)
+		signal.Notify(secondSig, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(secondSig)
 
 		select {
-		case choice := <-choiceChan:
+		case choice := <-choiceCh:
 			if strings.ToLower(choice) == "d" {
-				fmt.Fprintf(os.Stderr, "Detaching from job %s. Use 'results' command to fetch results later.", sid)
+				fmt.Fprintf(os.Stderr, "Detached from %s. Use 'results --sid %s' to fetch results.\n", sid, sid)
 				return nil
 			}
-		case <-secondSigChan:
+		case <-secondSig:
 		}
-		return client.CancelSearch(sid)
+		return c.CancelSearch(context.Background(), sid)
 	}
 
-	client.Log.Println("Fetching results...")
-	results, err := client.Results(sid, baseCfg.Limit)
+	c.Logf("Fetching results...\n")
+	results, err := c.Results(ctx, sid, cfg.Limit)
 	if err != nil {
 		return err
 	}
 	fmt.Println(results)
 	return nil
+}
+
+// readFromTTY reads a line from /dev/tty (Unix) or stdin (Windows).
+func readFromTTY() string {
+	var r io.Reader
+	if runtime.GOOS != "windows" {
+		tty, err := os.Open("/dev/tty")
+		if err == nil {
+			defer tty.Close()
+			r = tty
+		}
+	}
+	if r == nil {
+		r = os.Stdin
+	}
+	line, _ := bufio.NewReader(r).ReadString('\n')
+	return strings.TrimSpace(line)
 }

@@ -1,41 +1,42 @@
 package cmd
 
 import (
-	"errors"
-	"flag"
+	"context"
 	"fmt"
 
-	"splunk_cli/splunk"
+	"github.com/spf13/cobra"
 )
 
-func statusCmd(args []string, baseCfg splunk.Config) error {
-	fs := flag.NewFlagSet("status", flag.ExitOnError)
-	sid := fs.String("sid", "", "Search ID (SID) of the job")
-	addCommonFlags(fs, &baseCfg)
-	fs.Parse(args)
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Check the status of a search job",
+	RunE:  runStatus,
+}
 
-	if *sid == "" {
-		return errors.New("--sid is a required argument for 'status'")
+func init() {
+	rootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().String("sid", "", "Search ID (SID) to check")
+	_ = statusCmd.MarkFlagRequired("sid")
+}
+
+func runStatus(cmd *cobra.Command, _ []string) error {
+	sid, _ := cmd.Flags().GetString("sid")
+	if err := requireHost(); err != nil {
+		return err
 	}
-	if baseCfg.Host == "" {
-		return errors.New("--host is required")
-	}
-	if err := promptForCredentials(&baseCfg); err != nil {
+	if err := promptForCredentials(); err != nil {
 		return err
 	}
 
-	client, err := splunk.NewClient(&baseCfg, false)
+	c, err := newClient(false)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Debug {
-		printDebugConfig(&baseCfg, client.Log)
-	}
 
-	done, jobState, _, _, err := client.JobStatus(*sid)
+	status, err := c.GetJobStatus(context.Background(), sid)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("SID: %s\nIsDone: %t\nDispatchState: %s", *sid, done, jobState)
+	fmt.Printf("SID: %s\nIsDone: %t\nDispatchState: %s\n", status.SID, status.IsDone, status.DispatchState)
 	return nil
 }

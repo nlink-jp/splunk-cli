@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-03-27
+
+### Breaking
+
+- Config format changed from JSON (`config.json`) to TOML (`config.toml`).
+  Rename `~/.config/splunk-cli/config.json` to `config.toml` and update the
+  format — see `config.example.toml` for the new structure.
+- Go module path changed to `github.com/nlink-jp/splunk-cli`.
+
+### Changed
+
+- Migrated from `nlink-jp` organization (transferred from `magifd2/splunk-cli`).
+- CLI framework replaced with [Cobra](https://github.com/spf13/cobra);
+  all commands and flags remain the same.
+- Splunk client moved to `internal/client`; config loading moved to `internal/config`.
+- Added config file permission check: warns if file is readable by group or others.
+- Added warning when sending a bearer token over unencrypted HTTP.
+- Makefile aligned with cli-series conventions (`check`, `build-all` targets).
+
+### Internal
+
+- Added unit tests for config loading and Splunk API client.
+
 ## [1.4.0] - 2025-08-28
 
 ### Changed

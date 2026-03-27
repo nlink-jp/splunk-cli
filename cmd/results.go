@@ -1,51 +1,55 @@
 package cmd
 
 import (
-	"errors"
-	"flag"
+	"context"
 	"fmt"
 
-	"splunk_cli/splunk"
+	"github.com/spf13/cobra"
 )
 
-func resultsCmd(args []string, baseCfg splunk.Config) error {
-	fs := flag.NewFlagSet("results", flag.ExitOnError)
-	sid := fs.String("sid", "", "Search ID (SID) of the job")
-	silent := fs.Bool("silent", false, "Suppress progress messages")
-	addCommonFlags(fs, &baseCfg)
-	fs.Parse(args)
+var resultsCmd = &cobra.Command{
+	Use:   "results",
+	Short: "Fetch results of a completed search job",
+	RunE:  runResults,
+}
 
-	if *sid == "" {
-		return errors.New("--sid is a required argument for 'results'")
+func init() {
+	rootCmd.AddCommand(resultsCmd)
+	resultsCmd.Flags().String("sid", "", "Search ID (SID) to fetch results for")
+	resultsCmd.Flags().Bool("silent", false, "Suppress progress messages")
+	_ = resultsCmd.MarkFlagRequired("sid")
+}
+
+func runResults(cmd *cobra.Command, _ []string) error {
+	sid, _ := cmd.Flags().GetString("sid")
+	silent, _ := cmd.Flags().GetBool("silent")
+
+	if err := requireHost(); err != nil {
+		return err
 	}
-	if baseCfg.Host == "" {
-		return errors.New("--host is required")
-	}
-	if err := promptForCredentials(&baseCfg); err != nil {
+	if err := promptForCredentials(); err != nil {
 		return err
 	}
 
-	client, err := splunk.NewClient(&baseCfg, *silent)
+	c, err := newClient(silent)
 	if err != nil {
 		return err
 	}
-	if baseCfg.Debug {
-		printDebugConfig(&baseCfg, client.Log)
-	}
 
-	done, jobState, _, _, err := client.JobStatus(*sid)
+	ctx := context.Background()
+	status, err := c.GetJobStatus(ctx, sid)
 	if err != nil {
 		return err
 	}
-	if !done {
-		return fmt.Errorf("job %s is not complete yet (state: %s)", *sid, jobState)
+	if !status.IsDone {
+		return fmt.Errorf("job %s is not complete yet (state: %s)", sid, status.DispatchState)
 	}
-	if jobState == "FAILED" {
-		return fmt.Errorf("cannot get results, job %s failed", *sid)
+	if status.DispatchState == "FAILED" {
+		return fmt.Errorf("job %s failed", sid)
 	}
 
-	client.Log.Println("Fetching results...")
-	results, err := client.Results(*sid, baseCfg.Limit)
+	c.Logf("Fetching results...\n")
+	results, err := c.Results(ctx, sid, cfg.Limit)
 	if err != nil {
 		return err
 	}
