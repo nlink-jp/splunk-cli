@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-03-27
+
+### Fixed
+
+- Fixed a resource leak where `resp.Body` was deferred inside the results
+  pagination loop, preventing response bodies from being closed until the
+  entire `Results()` call returned. Extracted `fetchResultsPage()` helper.
+- Fixed empty results marshalling as `{"results": null}` instead of
+  `{"results": []}` when a completed job has zero results.
+- Eliminated a redundant `GetJobStatus` API call: `Results()` previously
+  fetched job status internally even though the caller had already done so.
+  The function now accepts `totalResults int` from the caller.
+
 ## [2.0.0] - 2026-03-27
 
 ### Breaking
