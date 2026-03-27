@@ -42,6 +42,13 @@ Priority: CLI flags > env vars (`SPLUNK_HOST`, `SPLUNK_TOKEN`, etc.) > config fi
 ## Testing
 
 ```
-make test    # go test ./...
-make check   # vet + lint + test + build
+make test              # go test ./...  (unit tests only)
+make check             # vet + lint + test + build (full quality gate)
+make integration-test  # start Splunk container, run integration tests
+make splunk-down       # stop and remove the Splunk test container
 ```
+
+Integration tests live in `internal/client/client_integration_test.go` with
+`//go:build integration`. They require `SPLUNK_HOST` and `SPLUNK_TOKEN` to be
+set (handled automatically by `make integration-test`). See `BUILD.md` for
+details including step-by-step usage and container defaults.

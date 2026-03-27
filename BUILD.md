@@ -1,77 +1,103 @@
-# **splunk-cliのビルド方法**
+# Development Guide
 
-このドキュメントでは、splunk-cliツールをソースコードからビルドするための手順を説明します。
+## Prerequisites
 
-## **1\. 前提条件**
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Go | 1.22+ | Build and test |
+| golangci-lint | latest | Lint (`make lint`) |
+| Podman | 4.0+ | Integration tests only |
+| Python 3 | any | `scripts/splunk-up.sh` helper |
+| curl | any | `scripts/splunk-up.sh` helper |
 
-* **Go言語**: バージョン1.18以上がインストールされている必要があります。  
-* **Git**: ソースコードのクローンに必要です（任意）。
+## Build
 
-## **2\. ビルド手順**
+```bash
+make build       # current platform → ./splunk-cli
+make build-all   # cross-compile → dist/
+make clean       # remove artifacts
+```
 
-### **ステップ 1: ソースコードの準備**
+Cross-compiled targets: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64,
+darwin universal (lipo), windows/amd64.
 
-splunk-cli.goとbuild.shを同じディレクトリに保存します。
+## Unit Tests
 
-### **ステップ 2: 依存関係の取得**
+```bash
+make test    # go test ./...
+make check   # vet → lint → test → build (full quality gate)
+```
 
-ターミナルで以下のコマンドを実行し、必要な外部パッケージをダウンロードします。
+Unit tests use only the standard library and mock HTTP servers — no external
+services required.
 
-go mod init splunk-cli  
-go mod tidy
+## Integration Tests
 
-### **ステップ 3: ビルドスクリプトの実行**
+Integration tests run against a real Splunk instance.  They use the
+`integration` build tag so they are excluded from `make test` / `make check`.
 
-ビルドを簡単にするため、build.shスクリプトを用意しています。このスクリプトは、macOS、Windows、Linux向けの実行可能ファイルを一度に生成します。
+### Requirements
 
-まず、スクリプトに実行権限を付与します。
+- **Podman** with a running machine (`podman machine start`)
+- First run downloads `splunk/splunk:9.4` (~1.7 GB)
+- On Apple Silicon the image runs under x86-64 emulation (Rosetta/QEMU);
+  startup takes ~2 minutes on first run, ~30 seconds on subsequent runs
 
-chmod \+x build.sh
+### Quick start
 
-次に、スクリプトを実行します。
+```bash
+# Start Splunk and run all integration tests (Splunk stays running afterwards)
+make integration-test
 
-./build.sh
+# Tear down when done
+make splunk-down
+```
 
-スクリプトが正常に完了すると、プロジェクトルートにdistディレクトリが作成され、その中に各OS向けの実行可能ファイルが格納されます。
+### Step-by-step
 
-* dist/macos/splunk-cli (macOS向けユニバーサルバイナリ)  
-* dist/windows/splunk-cli.exe (Windows向け)  
-* dist/linux/splunk-cli (Linux向け)
+```bash
+# 1. Start Splunk (exports SPLUNK_HOST and SPLUNK_TOKEN to the current shell)
+eval "$(scripts/splunk-up.sh)"
 
-## **(参考) 手動でのビルド**
+# 2. Run integration tests
+go test -v -tags integration -timeout 5m ./internal/client/...
 
-ビルドスクリプトを使わずに、手動で特定のOS向けにビルドすることも可能です。
+# 3. Run a specific test
+go test -v -tags integration -run TestIntegration_SearchAndResults ./internal/client/...
 
-### **ローカル環境向けのビルド**
+# 4. Tear down
+scripts/splunk-down.sh
+```
 
-現在使用しているOS向けの実行可能ファイルを作成します。
+### Environment variables
 
-go build \-o splunk-cli splunk-cli.go
+| Variable | Description |
+|----------|-------------|
+| `SPLUNK_HOST` | Base URL of the Splunk REST API, e.g. `https://localhost:18503` |
+| `SPLUNK_TOKEN` | Session token obtained via `splunk-up.sh` |
 
-### **クロスコンパイル (他のOS向けのビルド)**
+The integration test file (`internal/client/client_integration_test.go`) skips
+all tests if either variable is unset, so running `make test` never accidentally
+hits a real Splunk instance.
 
-Goのクロスコンパイル機能を利用して、他のOS向けのバイナリを生成できます。
+### Container defaults
 
-#### **Windows (amd64) 向け**
+| Setting | Value |
+|---------|-------|
+| Image | `docker.io/splunk/splunk:9.4` |
+| Container name | `splunk-test` |
+| Admin password | `Admin1234!` |
+| REST API port | random in 18000–18999 (avoids conflicts) |
+| TLS | self-signed (tests use `--insecure`) |
 
-GOOS=windows GOARCH=amd64 go build \-o splunk-cli.exe splunk-cli.go
+## Release
 
-#### **Linux (amd64) 向け**
+See the [Release Process](CHANGELOG.md) and [cli-series conventions](../CONVENTIONS.md).
 
-GOOS=linux GOARCH=amd64 go build \-o splunk-cli splunk-cli.go
-
-#### **macOS (ユニバーサルバイナリ)**
-
-Apple Silicon (arm64)とIntel (amd64)の両方で動作する単一のバイナリを作成します。
-
-\# arm64向けにビルド  
-GOOS=darwin GOARCH=arm64 go build \-o splunk-cli-arm64 splunk-cli.go
-
-\# amd64向けにビルド  
-GOOS=darwin GOARCH=amd64 go build \-o splunk-cli-amd64 splunk-cli.go
-
-\# lipoコマンドで2つを結合  
-lipo \-create \-output splunk-cli splunk-cli-arm64 splunk-cli-amd64
-
-\# 一時ファイルを削除  
-rm splunk-cli-arm64 splunk-cli-amd64  
+```bash
+make check            # must pass before tagging
+git tag vX.Y.Z
+git push origin vX.Y.Z
+make build-all        # produces dist/
+# zip each binary and upload to GitHub Release
+```

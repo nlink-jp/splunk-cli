@@ -148,10 +148,17 @@ These flags are available for most commands:
 
 This project uses a `Makefile` for common development tasks.
 
-- `make build`: Build binaries for all target platforms (macOS, Linux, Windows).
-- `make test`: Run tests.
-- `make lint`: Run the linter (`golangci-lint`).n- `make vulncheck`: Scan for known vulnerabilities (`govulncheck`).
-- `make clean`: Clean up build artifacts.
+| Command | Description |
+|---------|-------------|
+| `make build` | Build binary for the current platform |
+| `make build-all` | Cross-compile for all target platforms |
+| `make test` | Run unit tests |
+| `make check` | Full quality gate: vet → lint → test → build |
+| `make integration-test` | Run integration tests against a live Splunk container (requires Podman) |
+| `make splunk-down` | Stop and remove the Splunk test container |
+| `make clean` | Remove build artifacts |
+
+See [BUILD.md](BUILD.md) for detailed build and test instructions.
 
 ## License
 
