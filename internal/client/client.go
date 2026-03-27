@@ -76,14 +76,14 @@ func New(cfg *config.Config, silent bool) (*Client, error) {
 // Logf writes to stderr unless silent.
 func (c *Client) Logf(format string, a ...any) {
 	if !c.silent {
-		fmt.Fprintf(c.stderr, format, a...)
+		_, _ = fmt.Fprintf(c.stderr, format, a...)
 	}
 }
 
 // debugf writes to stderr only when debug is enabled.
 func (c *Client) debugf(format string, a ...any) {
 	if c.cfg.Debug {
-		fmt.Fprintf(c.stderr, "DEBUG: "+format, a...)
+		_, _ = fmt.Fprintf(c.stderr, "DEBUG: "+format, a...)
 	}
 }
 
@@ -177,7 +177,7 @@ func (c *Client) StartSearch(ctx context.Context, spl, earliest, latest string) 
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if err := checkStatus(resp, http.StatusCreated); err != nil {
 		return "", err
@@ -212,7 +212,7 @@ func (c *Client) GetJobStatus(ctx context.Context, sid string) (JobStatus, error
 	if err != nil {
 		return JobStatus{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if err := checkStatus(resp, http.StatusOK); err != nil {
 		return JobStatus{}, err
@@ -337,7 +337,7 @@ func (c *Client) fetchResultsPage(ctx context.Context, sid string, offset, count
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if err := checkStatus(resp, http.StatusOK); err != nil {
 		return nil, err
@@ -370,7 +370,7 @@ func (c *Client) CancelSearch(ctx context.Context, sid string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

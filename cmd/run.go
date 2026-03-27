@@ -129,7 +129,7 @@ func readFromTTY() string {
 	if runtime.GOOS != "windows" {
 		tty, err := os.Open("/dev/tty")
 		if err == nil {
-			defer tty.Close()
+			defer func() { _ = tty.Close() }()
 			r = tty
 		}
 	}

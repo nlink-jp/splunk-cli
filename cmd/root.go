@@ -139,7 +139,7 @@ func promptForCredentials() error {
 // requireHost returns an error if no host is configured.
 func requireHost() error {
 	if cfg.Host == "" {
-		return fmt.Errorf("Splunk host is required (--host, SPLUNK_HOST env var, or host in config file)")
+		return fmt.Errorf("splunk host is required (--host, SPLUNK_HOST env var, or host in config file)")
 	}
 	return nil
 }

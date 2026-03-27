@@ -11,26 +11,6 @@ import (
 	"github.com/nlink-jp/splunk-cli/internal/config"
 )
 
-func newTestClient(t *testing.T, handler http.Handler) *Client {
-	t.Helper()
-	srv := httptest.NewTLSServer(handler)
-	t.Cleanup(srv.Close)
-
-	cfg := &config.Config{
-		Host:     srv.URL,
-		Token:    "testtoken",
-		Insecure: true,
-	}
-	c, err := New(cfg, true)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	// Use the test server's TLS client to handle self-signed cert.
-	c.http = srv.Client()
-	// Re-add token setup by wrapping the transport.
-	return c
-}
-
 func TestStartSearch(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -40,7 +20,7 @@ func TestStartSearch(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"sid": "test_sid_123"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"sid": "test_sid_123"})
 	})
 
 	srv := httptest.NewServer(handler)
@@ -64,10 +44,10 @@ func TestStartSearch(t *testing.T) {
 func TestStartSearch_PipePrefix(t *testing.T) {
 	var gotSearch string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+		_ = r.ParseForm()
 		gotSearch = r.FormValue("search")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"sid": "sid1"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"sid": "sid1"})
 	})
 
 	srv := httptest.NewServer(handler)
@@ -77,13 +57,13 @@ func TestStartSearch_PipePrefix(t *testing.T) {
 	c, _ := New(cfg, true)
 
 	// SPL starting with | should NOT get "search " prefix.
-	c.StartSearch(context.Background(), "| stats count", "", "")
+	_, _ = c.StartSearch(context.Background(), "| stats count", "", "")
 	if gotSearch != "| stats count" {
 		t.Errorf("pipe SPL should not get prefix, got: %q", gotSearch)
 	}
 
 	// Normal SPL should get "search " prefix.
-	c.StartSearch(context.Background(), "index=main", "", "")
+	_, _ = c.StartSearch(context.Background(), "index=main", "", "")
 	if gotSearch != "search index=main" {
 		t.Errorf("normal SPL should get prefix, got: %q", gotSearch)
 	}
@@ -92,7 +72,7 @@ func TestStartSearch_PipePrefix(t *testing.T) {
 func TestGetJobStatus(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"entry": []map[string]any{
 				{"content": map[string]any{
 					"isDone":        true,
@@ -127,7 +107,7 @@ func TestGetJobStatus(t *testing.T) {
 
 func TestGetJobStatus_NotFound(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"entry": []any{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"entry": []any{}})
 	})
 
 	srv := httptest.NewServer(handler)
@@ -145,7 +125,7 @@ func TestGetJobStatus_NotFound(t *testing.T) {
 func TestGetJobStatus_APIError(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
+		_, _ = w.Write([]byte("Unauthorized"))
 	})
 
 	srv := httptest.NewServer(handler)
@@ -168,7 +148,7 @@ func TestCancelSearch(t *testing.T) {
 		if !strings.Contains(r.URL.Path, "control") {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		r.ParseForm()
+		_ = r.ParseForm()
 		if r.FormValue("action") != "cancel" {
 			t.Errorf("expected action=cancel, got %q", r.FormValue("action"))
 		}

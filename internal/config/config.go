@@ -121,7 +121,7 @@ func ApplyEnvVars(cfg *Config) {
 
 func checkPermissions(path string, info os.FileInfo) {
 	if info.Mode().Perm()&0077 != 0 {
-		fmt.Fprintf(Stderr,
+		_, _ = fmt.Fprintf(Stderr,
 			"Warning: config file %s has permissions %#o; expected 0600.\n"+
 				"  The file may contain credentials. Run: chmod 600 %s\n",
 			path, info.Mode().Perm(), path,
