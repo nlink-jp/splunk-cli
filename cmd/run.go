@@ -111,7 +111,11 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	}
 
 	c.Logf("Fetching results...\n")
-	results, err := c.Results(ctx, sid, cfg.Limit)
+	status, err := c.GetJobStatus(ctx, sid)
+	if err != nil {
+		return err
+	}
+	results, err := c.Results(ctx, sid, cfg.Limit, status.ResultCount)
 	if err != nil {
 		return err
 	}

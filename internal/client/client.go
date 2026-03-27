@@ -285,58 +285,26 @@ func (c *Client) WaitForJob(ctx context.Context, sid string) error {
 }
 
 // Results fetches all results of a completed job, handling pagination.
-// If limit is 0, all results are returned.
-func (c *Client) Results(ctx context.Context, sid string, limit int) (string, error) {
-	status, err := c.GetJobStatus(ctx, sid)
-	if err != nil {
-		return "", fmt.Errorf("get job status before results: %w", err)
-	}
-
+// totalResults is the result count from a prior GetJobStatus call; pass it to
+// avoid a redundant status fetch. If limit is 0, all results are returned.
+func (c *Client) Results(ctx context.Context, sid string, limit, totalResults int) (string, error) {
 	fetchCount := limit
-	if limit == 0 || limit > status.ResultCount {
-		fetchCount = status.ResultCount
+	if limit == 0 || limit > totalResults {
+		fetchCount = totalResults
 	}
 
-	var all []json.RawMessage
+	all := make([]json.RawMessage, 0, fetchCount)
 	for offset := 0; offset < fetchCount; offset += maxResultsPerPage {
 		count := maxResultsPerPage
 		if offset+count > fetchCount {
 			count = fetchCount - offset
 		}
 
-		endpoint, err := c.apiURL("search", "jobs", sid, "results")
+		page, err := c.fetchResultsPage(ctx, sid, offset, count)
 		if err != nil {
 			return "", err
 		}
-		c.debugf("GET %s (offset=%d count=%d)\n", endpoint, offset, count)
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return "", err
-		}
-		q := req.URL.Query()
-		q.Set("output_mode", "json")
-		q.Set("offset", fmt.Sprintf("%d", offset))
-		q.Set("count", fmt.Sprintf("%d", count))
-		req.URL.RawQuery = q.Encode()
-
-		resp, err := c.do(req)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		if err := checkStatus(resp, http.StatusOK); err != nil {
-			return "", err
-		}
-
-		var page struct {
-			Results []json.RawMessage `json:"results"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-			return "", fmt.Errorf("decode results page: %w", err)
-		}
-		all = append(all, page.Results...)
+		all = append(all, page...)
 	}
 
 	out, err := json.MarshalIndent(map[string]any{"results": all}, "", "  ")
@@ -344,6 +312,44 @@ func (c *Client) Results(ctx context.Context, sid string, limit int) (string, er
 		return "", fmt.Errorf("marshal results: %w", err)
 	}
 	return string(out), nil
+}
+
+// fetchResultsPage fetches one page of results. The response body is closed
+// before returning so callers do not need to manage it.
+func (c *Client) fetchResultsPage(ctx context.Context, sid string, offset, count int) ([]json.RawMessage, error) {
+	endpoint, err := c.apiURL("search", "jobs", sid, "results")
+	if err != nil {
+		return nil, err
+	}
+	c.debugf("GET %s (offset=%d count=%d)\n", endpoint, offset, count)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	q := req.URL.Query()
+	q.Set("output_mode", "json")
+	q.Set("offset", fmt.Sprintf("%d", offset))
+	q.Set("count", fmt.Sprintf("%d", count))
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp, http.StatusOK); err != nil {
+		return nil, err
+	}
+
+	var page struct {
+		Results []json.RawMessage `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+		return nil, fmt.Errorf("decode results page: %w", err)
+	}
+	return page.Results, nil
 }
 
 // CancelSearch cancels a running job.
