@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-03-27
+
+### Added
+
+- Integration tests against a live Splunk instance (`//go:build integration`).
+  Covers: full search lifecycle, limit, empty results, cancel, invalid SPL,
+  and search-prefix behaviour.
+- `scripts/splunk-up.sh` / `scripts/splunk-down.sh`: start and stop a
+  `splunk/splunk` container via Podman for local integration testing.
+- `make integration-test` / `make splunk-up` / `make splunk-down` targets.
+
+### Documentation
+
+- `BUILD.md` rewritten with current build, test, and release instructions.
+- `CLAUDE.md` testing section expanded with integration-test targets.
+- `README.md` development section updated with current Makefile targets.
+
 ## [2.0.1] - 2026-03-27
 
 ### Fixed
