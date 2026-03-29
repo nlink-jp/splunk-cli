@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 BINARY  := splunk-cli
-CMD     := ./cmd/splunk-cli
+CMD     := .
 
 .PHONY: build test vet lint check build-all clean \
         splunk-up splunk-down integration-test
