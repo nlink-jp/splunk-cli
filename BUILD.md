@@ -13,7 +13,7 @@
 ## Build
 
 ```bash
-make build       # current platform → ./splunk-cli
+make build       # current platform → dist/splunk-cli
 make build-all   # cross-compile → dist/
 make clean       # remove artifacts
 ```

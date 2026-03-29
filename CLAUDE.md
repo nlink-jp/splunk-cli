@@ -7,7 +7,7 @@ Series and org conventions: see `../CONVENTIONS.md` and
 ## Architecture
 
 ```
-cmd/splunk-cli/main.go    Entry point — injects version, calls cmd.Execute()
+main.go                   Entry point — injects version, calls cmd.Execute()
 cmd/
   root.go                 Cobra root command, persistent flags, config loading
   common.go               Shared helpers (getSPL)
