@@ -6,8 +6,8 @@ CMD     := ./cmd/splunk-cli
 .PHONY: build test vet lint check build-all clean \
         splunk-up splunk-down integration-test
 
-build:
-	go build $(LDFLAGS) -o $(BINARY) $(CMD)
+build: _dist
+	go build $(LDFLAGS) -o dist/$(BINARY) $(CMD)
 
 test:
 	go test ./...
@@ -64,5 +64,4 @@ integration-test:
 		go test -v -tags integration -timeout 5m ./internal/client/...
 
 clean:
-	rm -f $(BINARY)
 	rm -rf dist/
