@@ -1,169 +1,166 @@
-# Splunk CLI Tool (splunk-cli)
+# splunk-cli
 
-**splunk-cli** is a powerful and lightweight command-line interface (CLI) tool written in Go for interacting with the Splunk REST API. It allows you to efficiently execute SPL (Search Processing Language) queries, manage search jobs, and retrieve results directly from your terminal or in scripts.
+A pipe-friendly CLI client for the Splunk REST API. Run SPL searches, manage search jobs, and retrieve results directly from the terminal.
+
+[日本語版 README はこちら](README.ja.md)
 
 ## Features
 
-- **Automation**: Trigger Splunk searches from shell scripts or CI/CD jobs and pipe the results into subsequent processes.
-- **Efficiency**: Quickly check data with a single command without opening the Web UI.
-- **Flexible Authentication**: Manage credentials via command-line flags, environment variables, a configuration file, or a secure interactive prompt.
-- **Long-Running Job Management**: The asynchronous execution model (`start`, `status`, `results`) allows you to manage heavy search jobs that may take hours, without tying up your terminal.
-- **App Context**: Use the `--app` flag to run searches within a specific app context, enabling the use of app-specific lookups and knowledge objects.
+- **Synchronous search** — `run` executes a query, waits for completion, and prints results
+- **Asynchronous search** — `start` → `status` → `results` for long-running jobs
+- **Pipe-friendly** — JSON output composable with `jq`, `json-to-table`, and other tools
+- **Flexible authentication** — Token, username/password, env vars, or config file
+- **App context** — `--app` flag for app-specific lookups and knowledge objects
+- **Ctrl+C handling** — Choose to cancel or background a running job
 
 ## Installation
 
-There are two ways to install `splunk-cli`:
+Download a pre-built binary from the [releases page](https://github.com/nlink-jp/splunk-cli/releases).
 
-### 1. From a Release (Recommended)
-
-You can download the pre-compiled binary for your operating system (macOS, Linux, Windows) from the [GitHub Releases page](https://github.com/magifd2/splunk-cli/releases).
-
-### 2. From Source
-
-If you have Go installed, you can build the tool from the source code.
+Or build from source:
 
 ```bash
-# Clone the repository
-git clone https://github.com/magifd2/splunk-cli.git
+git clone https://github.com/nlink-jp/splunk-cli.git
 cd splunk-cli
-
-# Build the binary
 make build
-
-# The executable will be in the dist/ directory, e.g., dist/macos/splunk-cli
+# Binary: dist/splunk-cli
 ```
+
+## Quick Start
+
+```bash
+# Set credentials
+export SPLUNK_HOST="https://your-splunk.example.com:8089"
+export SPLUNK_TOKEN="your-token"
+
+# Run a search
+splunk-cli run --spl "index=_internal | head 10"
+
+# Pipe to jq
+splunk-cli run --spl "index=main | stats count by sourcetype" | jq .
+
+# Read SPL from stdin
+cat query.spl | splunk-cli run -f -
+```
+
+## Configuration
+
+Copy the example config and set your values:
+
+```bash
+mkdir -p ~/.config/splunk-cli
+cp config.example.toml ~/.config/splunk-cli/config.toml
+chmod 600 ~/.config/splunk-cli/config.toml
+```
+
+```toml
+# ~/.config/splunk-cli/config.toml
+[splunk]
+host  = "https://your-splunk.example.com:8089"
+token = "your-token"
+# app = "search"
+# insecure = false
+# http_timeout = "30s"
+# limit = 0
+```
+
+**Priority order (highest first):** CLI flags → environment variables → config file
+
+| Environment variable | Description |
+|---|---|
+| `SPLUNK_HOST` | Splunk server URL (including port) |
+| `SPLUNK_TOKEN` | Bearer token (recommended) |
+| `SPLUNK_USER` | Username (basic auth) |
+| `SPLUNK_PASSWORD` | Password (basic auth) |
+| `SPLUNK_APP` | App context for searches |
 
 ## Usage
 
-### Configuration
+```
+splunk-cli [command]
 
-The most convenient way to use the tool is by creating a configuration file.
+Commands:
+  run         Run a SPL search and print results (synchronous)
+  start       Start a SPL search asynchronously and print the SID
+  status      Check the status of a search job
+  results     Fetch results of a completed search job
 
-**Path**: `~/.config/splunk-cli/config.json`
-
-**Example Content**:
-```json
-{
-  "host": "https://your-splunk-instance.com:8089",
-  "token": "your-splunk-token-here",
-  "app": "search",
-  "insecure": true,
-  "httpTimeout": "60s",
-  "limit": 100
-}
+Global flags:
+  -c, --config string           Config file path (default: ~/.config/splunk-cli/config.toml)
+      --host string             Splunk server URL (env: SPLUNK_HOST)
+      --token string            Bearer token (env: SPLUNK_TOKEN)
+      --user string             Username for basic auth (env: SPLUNK_USER)
+      --password string         Password (env: SPLUNK_PASSWORD)
+      --app string              App context for searches (env: SPLUNK_APP)
+      --owner string            Knowledge object owner (default: nobody)
+      --limit int               Max results to return (0 = all)
+      --insecure                Skip TLS certificate verification
+      --http-timeout duration   Per-request HTTP timeout (e.g. 30s, 2m)
+      --debug                   Enable verbose debug logging
+  -v, --version                 Print version information
 ```
 
-### Configuration Priority
+### `run` — Synchronous search
 
-Settings are evaluated in the following order of precedence (highest priority first):
-
-1.  **Command-line Flags** (e.g., `--config <path>`)
-2.  **Command-line Flags (specific)** (e.g., `--host <URL>`)
-3.  **Environment Variables** (e.g., `SPLUNK_HOST`, `SPLUNK_APP`)
-4.  **Configuration File**
-
-### Global Flags
-
-These flags can be used with any command:
-
-- `--config <path>`: Path to a custom configuration file. Overrides the default `~/.config/splunk-cli/config.json`.
-- `--version`: Print version information and exit.
-
-### Commands
-
-`splunk-cli` provides a set of commands for different tasks.
-
-#### `run`
-
-Starts a search, waits for it to complete, and displays the results.
-
-**Examples**:
 ```bash
-# Search data from the last hour, limiting to 10 results
+# Search with time range
 splunk-cli run --spl "index=_internal" --earliest "-1h" --limit 10
 
-# Read SPL from a file and execute
-cat my_query.spl | splunk-cli run -f -
+# Read SPL from file
+splunk-cli run -f query.spl
+
+# Read SPL from stdin
+echo 'index=main | stats count' | splunk-cli run -f -
+
+# With timeout
+splunk-cli run --spl "index=main | stats count by host" --timeout 5m
 ```
 
-- `--spl <string>`: The SPL query to execute.
-- `--file <path>` or `-f <path>`: Read the SPL query from a file. Use `-` for stdin.
-- `--earliest <time>`: The earliest time for the search (e.g., -1h, @d, 1672531200).
-- `--latest <time>`: The latest time for the search (e.g., now, @d, 1672617600).
-- `--timeout <duration>`: Total timeout for the job (e.g., 10m, 1h30m).
-- `--limit <int>`: Maximum number of results to return (0 for all).
-- `--silent`: Suppress progress messages.
+| Flag | Description |
+|---|---|
+| `--spl <string>` | SPL query to execute |
+| `-f, --file <path>` | Read SPL from file (use `-` for stdin) |
+| `--earliest <time>` | Start time (e.g. `-1h`, `@d`, epoch) |
+| `--latest <time>` | End time (e.g. `now`, `@d`, epoch) |
+| `--timeout <duration>` | Total job timeout (e.g. `10m`, `1h`) |
+| `--limit <int>` | Max results (0 = all) |
+| `--silent` | Suppress progress messages |
 
-> **💡 Ctrl+C Behavior**: When you press `Ctrl+C` during a `run` command, you can choose to either cancel the job or let it continue running in the background.
+> **Ctrl+C**: during `run`, you can choose to cancel the job or let it continue in the background.
 
-#### `start`
+### `start` — Asynchronous search
 
-Starts a search job and immediately prints the Job ID (SID) to stdout.
-
-**Example**:
 ```bash
-export JOB_ID=$(splunk-cli start --spl "index=main | stats count by sourcetype")
-echo "Job started with SID: $JOB_ID"
+JOB_ID=$(splunk-cli start --spl "index=main | stats count by sourcetype")
+echo "Started: $JOB_ID"
 ```
 
-#### `status`
+### `status` — Check job status
 
-Checks the status of a specified job SID.
-
-**Example**:
 ```bash
 splunk-cli status --sid "$JOB_ID"
 ```
 
-#### `results`
+### `results` — Fetch job results
 
-Fetches the results of a completed job. This is useful in combination with tools like `jq`.
-
-**Example**:
 ```bash
-# Fetch up to 50 results for a given job
 splunk-cli results --sid "$JOB_ID" --limit 50 --silent | jq .
 ```
 
-- `--sid <string>`: The Search ID (SID) of the job.
-- `--limit <int>`: Maximum number of results to return (0 for all).
+## Building
 
-### Common Flags
+```bash
+make build            # Current platform → dist/splunk-cli
+make build-all        # All platforms → dist/
+make test             # Unit tests
+make check            # vet → lint → test → build
+make integration-test # Integration tests (requires Podman + Splunk container)
+make splunk-down      # Stop Splunk test container
+make clean            # Remove dist/
+```
 
-These flags are available for most commands:
-
-- `--host <url>`: The URL of the Splunk server.
-- `--token <string>`: The authentication token.
-- `--user <string>`: The username.
-- `--password <string>`: The password (will be prompted for if not provided).
-- `--app <string>`: The app context for the search.
-- `--owner <string>`: The owner of knowledge objects within the app (defaults to `nobody`).
-- `--limit <int>`: Maximum number of results to return (0 for all). The default is 0 (all results).
-- `--insecure`: Skip TLS certificate verification.
-- `--http-timeout <duration>`: Timeout for individual API requests (e.g., 30s, 1m).
-- `--debug`: Enable detailed debug logging.
-- `--version`: Print version information.
-
-## Development
-
-This project uses a `Makefile` for common development tasks.
-
-| Command | Description |
-|---------|-------------|
-| `make build` | Build binary for the current platform |
-| `make build-all` | Cross-compile for all target platforms |
-| `make test` | Run unit tests |
-| `make check` | Full quality gate: vet → lint → test → build |
-| `make integration-test` | Run integration tests against a live Splunk container (requires Podman) |
-| `make splunk-down` | Stop and remove the Splunk test container |
-| `make clean` | Remove build artifacts |
-
-See [BUILD.md](BUILD.md) for detailed build and test instructions.
+See [BUILD.md](BUILD.md) for detailed build and integration test instructions.
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
-
-*This tool was bootstrapped and developed in collaboration with Gemini, a large language model from Google.*
+MIT License. See [LICENSE](LICENSE).

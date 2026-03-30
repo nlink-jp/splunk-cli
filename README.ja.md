@@ -1,163 +1,166 @@
-# Splunk CLIツール (splunk-cli)
+# splunk-cli
 
-**splunk-cli**は、SplunkのREST APIと対話するための、Go言語で書かれた強力かつ軽量なコマンドラインインターフェース（CLI）ツールです。ターミナルから直接、またはスクリプト経由で、SPL（Search Processing Language）クエリの実行、検索ジョブの管理、そして結果の取得を効率的に行うことができます。
+Splunk REST API のパイプ対応 CLI クライアント。SPL 検索の実行、ジョブ管理、結果の取得をターミナルから直接行える。
 
-## 主な機能
+[English README is here](README.md)
 
-- **自動化**: シェルスクリプトやCI/CDジョブからSplunkの検索をトリガーし、結果を後続の処理に渡すことができます。
-- **効率性**: Web UIを開くことなく、コマンド一つで迅速にデータを確認できます。
-- **柔軟な認証**: コマンドライン引数、環境変数、設定ファイル、そして安全な対話プロンプトと、多様な方法で認証情報を管理できます。
-- **長時間のジョブ管理**: 非同期実行モデル（`start`, `status`, `results`）により、完了までに数時間かかるような重い検索ジョブも、ターミナルを占有することなく管理できます。
-- **Appコンテキスト**: `--app`フラグを使用することで、特定のAppコンテキストで検索を実行でき、Appに閉じたlookupなどを利用できます。
+## 特徴
+
+- **同期検索** — `run` でクエリを実行し、完了を待って結果を出力
+- **非同期検索** — `start` → `status` → `results` で長時間ジョブを管理
+- **パイプ対応** — JSON 出力を `jq`、`json-to-table` 等と組み合わせ可能
+- **柔軟な認証** — トークン、ユーザー名/パスワード、環境変数、設定ファイル
+- **App コンテキスト** — `--app` フラグで App 固有のルックアップやナレッジオブジェクトを使用
+- **Ctrl+C 対応** — 実行中のジョブをキャンセルするかバックグラウンド継続するか選択可能
 
 ## インストール
 
-`splunk-cli`のインストール方法は2つあります。
+[リリースページ](https://github.com/nlink-jp/splunk-cli/releases) からビルド済みバイナリをダウンロード。
 
-### 1. リリースから（推奨）
-
-[GitHubリリースページ](https://github.com/magifd2/splunk-cli/releases)から、お使いのOS（macOS, Linux, Windows）に対応したコンパイル済みのバイナリをダウンロードできます。
-
-### 2. ソースから
-
-Goがインストールされている環境であれば、ソースコードからビルドすることも可能です。
+またはソースからビルド:
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/magifd2/splunk-cli.git
+git clone https://github.com/nlink-jp/splunk-cli.git
 cd splunk-cli
-
-# ビルドを実行
 make build
-
-# 実行ファイルは dist/ ディレクトリに生成されます (例: dist/macos/splunk-cli)
+# バイナリ: dist/splunk-cli
 ```
+
+## クイックスタート
+
+```bash
+# 認証情報の設定
+export SPLUNK_HOST="https://your-splunk.example.com:8089"
+export SPLUNK_TOKEN="your-token"
+
+# 検索の実行
+splunk-cli run --spl "index=_internal | head 10"
+
+# jq にパイプ
+splunk-cli run --spl "index=main | stats count by sourcetype" | jq .
+
+# stdin から SPL を読み込み
+cat query.spl | splunk-cli run -f -
+```
+
+## 設定
+
+設定例ファイルをコピー:
+
+```bash
+mkdir -p ~/.config/splunk-cli
+cp config.example.toml ~/.config/splunk-cli/config.toml
+chmod 600 ~/.config/splunk-cli/config.toml
+```
+
+```toml
+# ~/.config/splunk-cli/config.toml
+[splunk]
+host  = "https://your-splunk.example.com:8089"
+token = "your-token"
+# app = "search"
+# insecure = false
+# http_timeout = "30s"
+# limit = 0
+```
+
+**優先順位（高い順）:** CLI フラグ → 環境変数 → 設定ファイル
+
+| 環境変数 | 説明 |
+|---|---|
+| `SPLUNK_HOST` | Splunk サーバー URL（ポート含む） |
+| `SPLUNK_TOKEN` | Bearer トークン（推奨） |
+| `SPLUNK_USER` | ユーザー名（Basic 認証） |
+| `SPLUNK_PASSWORD` | パスワード（Basic 認証） |
+| `SPLUNK_APP` | 検索の App コンテキスト |
 
 ## 使い方
 
-### 設定
+```
+splunk-cli [command]
 
-最も便利な使い方は、設定ファイルを作成することです。
+コマンド:
+  run         SPL 検索を実行し結果を出力（同期）
+  start       SPL 検索を非同期で開始し SID を出力
+  status      検索ジョブのステータスを確認
+  results     完了した検索ジョブの結果を取得
 
-**パス**: `~/.config/splunk-cli/config.json`
-
-**内容例**:
-```json
-{
-  "host": "https://your-splunk-instance.com:8089",
-  "token": "your-splunk-token-here",
-  "app": "search",
-  "insecure": true,
-  "httpTimeout": "60s",
-  "limit": 100
-}
+グローバルフラグ:
+  -c, --config string           設定ファイルパス（デフォルト: ~/.config/splunk-cli/config.toml）
+      --host string             Splunk サーバー URL（env: SPLUNK_HOST）
+      --token string            Bearer トークン（env: SPLUNK_TOKEN）
+      --user string             ユーザー名（env: SPLUNK_USER）
+      --password string         パスワード（env: SPLUNK_PASSWORD）
+      --app string              App コンテキスト（env: SPLUNK_APP）
+      --owner string            ナレッジオブジェクトオーナー（デフォルト: nobody）
+      --limit int               最大結果数（0 = 全件）
+      --insecure                TLS 証明書検証をスキップ
+      --http-timeout duration   リクエストごとの HTTP タイムアウト（例: 30s, 2m）
+      --debug                   デバッグログを有効化
+  -v, --version                 バージョン情報を表示
 ```
 
-### 設定の優先順位
+### `run` — 同期検索
 
-設定は以下の優先順位で評価されます。強いものが優先されます。
-
-1.  **コマンドラインフラグ (グローバル)** (例: `--config <path>`)
-2.  **コマンドラインフラグ (コマンド固有)** (例: `--host <URL>`)
-3.  **環境変数** (例: `SPLUNK_HOST`, `SPLUNK_APP`)
-4.  **設定ファイル**
-
-### グローバルフラグ
-
-これらのフラグはどのコマンドでも使用できます:
-
-- `--config <path>`: カスタム設定ファイルへのパス。デフォルトの `~/.config/splunk-cli/config.json` を上書きします。
-- `--version`: バージョン情報を表示して終了します。
-
-### コマンド一覧
-
-`splunk-cli`は、タスクに応じたコマンドを提供します。
-
-#### `run`
-
-検索を開始し、完了まで待って結果を表示します。
-
-**使用例**:
 ```bash
-# 過去1時間のデータを10件に絞って検索
+# 時間範囲を指定して検索
 splunk-cli run --spl "index=_internal" --earliest "-1h" --limit 10
 
-# ファイルからSPLを読み込んで検索
-cat my_query.spl | splunk-cli run -f -
+# ファイルから SPL を読み込み
+splunk-cli run -f query.spl
+
+# stdin から SPL
+echo 'index=main | stats count' | splunk-cli run -f -
+
+# タイムアウト付き
+splunk-cli run --spl "index=main | stats count by host" --timeout 5m
 ```
 
-- `--spl <string>`: 実行するSPLクエリ。
-- `--file <path>` / `-f <path>`: SPLクエリをファイルから読み込みます。パスに`-`を指定すると標準入力から読み込みます。
-- `--earliest <time>`: 検索の開始時刻。(-1h, @d, 1672531200など)
-- `--latest <time>`: 検索の終了時刻。(now, @d, 1672617600など)
-- `--timeout <duration>`: ジョブ全体のタイムアウト時間。(10m, 1h30mなど)
-- `--limit <int>`: 最大取得件数 (0を指定すると全件取得)。
-- `--silent`: 進捗メッセージを非表示にします。
+| フラグ | 説明 |
+|---|---|
+| `--spl <string>` | 実行する SPL クエリ |
+| `-f, --file <path>` | ファイルから SPL を読み込み（`-` で stdin） |
+| `--earliest <time>` | 開始時刻（例: `-1h`, `@d`, エポック） |
+| `--latest <time>` | 終了時刻（例: `now`, `@d`, エポック） |
+| `--timeout <duration>` | ジョブ全体のタイムアウト（例: `10m`, `1h`） |
+| `--limit <int>` | 最大結果数（0 = 全件） |
+| `--silent` | 進行状況メッセージを抑制 |
 
-> **💡 Ctrl+C の挙動**: `run`の実行中に `Ctrl+C` を押すと、ジョブをキャンセルするか、バックグラウンドで実行し続けるかを選択できます。
+> **Ctrl+C**: `run` 実行中に Ctrl+C を押すと、ジョブのキャンセルまたはバックグラウンド継続を選択できます。
 
-#### `start`
+### `start` — 非同期検索
 
-検索ジョブを開始し、ジョブID (SID) のみを標準出力に表示して即座に終了します。
-
-**使用例**:
 ```bash
-export JOB_ID=$(splunk-cli start --spl "index=main | stats count by sourcetype")
-echo "Job started with SID: $JOB_ID"
+JOB_ID=$(splunk-cli start --spl "index=main | stats count by sourcetype")
+echo "Started: $JOB_ID"
 ```
 
-#### `status`
+### `status` — ジョブステータス確認
 
-指定したSIDのジョブの状態を確認します。
-
-**使用例**:
 ```bash
 splunk-cli status --sid "$JOB_ID"
 ```
 
-#### `results`
+### `results` — ジョブ結果取得
 
-完了したジョブの結果を取得します。`jq`のようなツールと組み合わせると便利です。
-
-**使用例**:
 ```bash
-# 指定したジョブの結果を50件まで取得
 splunk-cli results --sid "$JOB_ID" --limit 50 --silent | jq .
 ```
 
-- `--sid <string>`: ジョブの検索ID (SID)。
-- `--limit <int>`: 最大取得件数 (0を指定すると全件取得)。
+## ビルド
 
-### 共通フラグ
+```bash
+make build            # 現在のプラットフォーム → dist/splunk-cli
+make build-all        # 全プラットフォーム → dist/
+make test             # ユニットテスト
+make check            # vet → lint → test → build
+make integration-test # 統合テスト（Podman + Splunk コンテナが必要）
+make splunk-down      # Splunk テストコンテナを停止
+make clean            # dist/ を削除
+```
 
-ほとんどのコマンドで利用できる共通フラグです。
-
-- `--host <url>`: SplunkサーバーのURL。
-- `--token <string>`: 認証トークン。
-- `--user <string>`: ユーザー名。
-- `--password <string>`: パスワード（指定しない場合はプロンプトで入力を求められます）。
-- `--app <string>`: 検索を実行するAppのコンテキスト。
-- `--owner <string>`: App内のナレッジオブジェクトの所有者。デフォルトは`nobody`。
-- `--limit <int>`: 最大取得件数 (0を指定すると全件取得)。デフォルトは0(全件取得)です。
-- `--insecure`: TLS証明書の検証をスキップします。
-- `--http-timeout <duration>`: 個々のAPIリクエストのタイムアウト時間。(30s, 1mなど)
-- `--debug`: 詳細なデバッグ情報を表示します。
-- `--version`: バージョン情報を表示します。
-
-## 開発
-
-このプロジェクトは、共通の開発タスクに `Makefile` を使用しています。
-
-- `make build`: 全てのターゲットプラットフォーム（macOS, Linux, Windows）のバイナリをビルドします。
-- `make test`: テストを実行します。
-- `make lint`: リンター（`golangci-lint`）を実行します。
-- `make vulncheck`: 既知の脆弱性をスキャンします（`govulncheck`）。
-- `make clean`: ビルド成果物を削除します。
+詳細は [BUILD.md](BUILD.md) を参照。
 
 ## ライセンス
 
-このプロジェクトは **MIT License** の下で公開されています。詳細は [LICENSE](LICENSE) ファイルをご覧ください。
-
----
-
-*このツールは、Googleの大規模言語モデルであるGeminiとの対話を通じて初期構築および開発されました。*
+MIT License — [LICENSE](LICENSE) を参照。
