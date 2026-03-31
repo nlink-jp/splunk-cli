@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -120,6 +121,13 @@ func ApplyEnvVars(cfg *Config) {
 }
 
 func checkPermissions(path string, info os.FileInfo) {
+	// NTFS does not support Unix permission bits; reported mode is always
+	// 0666 regardless of ACL settings, making this check meaningless.
+	// On Windows, users should restrict access via NTFS ACLs instead.
+	// See README.md "Windows: Config File Security" for guidance.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	if info.Mode().Perm()&0077 != 0 {
 		_, _ = fmt.Fprintf(Stderr,
 			"Warning: config file %s has permissions %#o; expected 0600.\n"+

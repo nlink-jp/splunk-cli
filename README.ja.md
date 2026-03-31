@@ -66,6 +66,20 @@ token = "your-token"
 
 **優先順位（高い順）:** CLI フラグ → 環境変数 → 設定ファイル
 
+### Windows: 設定ファイルのセキュリティ
+
+Unix/macOS では、設定ファイルが他ユーザーから読み取り可能な場合に警告が表示されます（`chmod 600` を推奨）。Windows (NTFS) では、NTFS が Unix パーミッションビットをサポートしないため、このチェックは自動的にスキップされます。
+
+**ただし、設定ファイルには認証情報が含まれる可能性があるため、保護は必要です。** Windows では NTFS ACL でアクセスを制限してください:
+
+```powershell
+# PowerShell: 設定ファイルを現在のユーザーのみに制限
+$path = "$env:USERPROFILE\.config\splunk-cli\config.toml"
+icacls $path /inheritance:r /grant:r "${env:USERNAME}:(R,W)"
+```
+
+または、設定ファイルに認証情報を保存せず、環境変数（`SPLUNK_TOKEN` 等）を使用する方法もあります。
+
 | 環境変数 | 説明 |
 |---|---|
 | `SPLUNK_HOST` | Splunk サーバー URL（ポート含む） |

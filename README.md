@@ -66,6 +66,20 @@ token = "your-token"
 
 **Priority order (highest first):** CLI flags → environment variables → config file
 
+### Windows: Config File Security
+
+On Unix/macOS, splunk-cli warns if the config file is readable by other users (`chmod 600` is expected). On Windows (NTFS), this check is automatically skipped because NTFS does not support Unix permission bits.
+
+**However, the config file may contain credentials and should still be protected.** On Windows, restrict access using NTFS ACLs:
+
+```powershell
+# PowerShell: restrict config file to current user only
+$path = "$env:USERPROFILE\.config\splunk-cli\config.toml"
+icacls $path /inheritance:r /grant:r "${env:USERNAME}:(R,W)"
+```
+
+Alternatively, use environment variables (`SPLUNK_TOKEN`, etc.) instead of storing credentials in the config file.
+
 | Environment variable | Description |
 |---|---|
 | `SPLUNK_HOST` | Splunk server URL (including port) |
