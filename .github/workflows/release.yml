@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release artifacts
+    # macOS runner is required for `lipo` (darwin-universal binary).
+    # Go cross-compiles the other platforms from here without issue.
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build all platform binaries
+        run: make build-all
+
+      - name: Package release archives
+        run: |
+          set -euo pipefail
+          cd dist
+          for bin in \
+            splunk-cli-linux-amd64 \
+            splunk-cli-linux-arm64 \
+            splunk-cli-darwin-amd64 \
+            splunk-cli-darwin-arm64 \
+            splunk-cli-darwin-universal \
+            splunk-cli-windows-amd64.exe
+          do
+            if [ ! -f "$bin" ]; then
+              echo "Missing expected build artifact: $bin" >&2
+              exit 1
+            fi
+            case "$bin" in
+              *.exe) zip_name="${bin%.exe}.zip" ;;
+              *)     zip_name="${bin}.zip" ;;
+            esac
+            zip -q "$zip_name" "$bin"
+            echo "Packaged $zip_name"
+          done
+          shasum -a 256 *.zip > SHA256SUMS.txt
+          ls -la
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/splunk-cli-linux-amd64.zip
+            dist/splunk-cli-linux-arm64.zip
+            dist/splunk-cli-darwin-amd64.zip
+            dist/splunk-cli-darwin-arm64.zip
+            dist/splunk-cli-darwin-universal.zip
+            dist/splunk-cli-windows-amd64.zip
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
