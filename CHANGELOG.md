@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-05-22
+
+### Added
+
+- **`package` Makefile target.** Builds all 5 platforms (plus the
+  darwin-universal binary when `lipo` is available), signs every
+  darwin variant, zips each with README.md using versioned naming
+  (`splunk-cli-vX.Y.Z-<os>-<arch>.zip`), and notarizes the darwin
+  zips. v2.0.3 was tagged without binary assets; v2.0.4 restores
+  the binary release flow (last seen in v2.0.2) with proper
+  signing and notarization.
+
+### Changed
+
+- **Darwin releases are now Developer ID signed and Apple-notarized.**
+  All three darwin variants — `darwin-amd64`, `darwin-arm64`, and
+  `darwin-universal` — carry full Apple Developer ID Application
+  signatures and notarization tickets from Apple. End users on
+  macOS no longer need to bypass Gatekeeper with right-click → Open
+  or `xattr -d com.apple.quarantine` on first launch; local users
+  who place `splunk-cli` under Dropbox-synced (or any other
+  FileProvider-managed) paths are no longer killed by macOS's
+  ad-hoc + provenance distrust policy. Pipeline:
+  `scripts/codesign-darwin.sh` + `scripts/notarize-darwin.sh`,
+  driven by `make package`. Adopts the org-wide convention in
+  `nlink-jp/.github` CONVENTIONS.md §Code Signing.
+- **Release zip filenames now embed the version**
+  (`splunk-cli-vX.Y.Z-<os>-<arch>.zip`), aligning with sibling
+  cli-series tools. v2.0.2 assets used version-less names.
+
+No behaviour change to the binary itself — feature-wise this is
+identical to v2.0.3.
+
 ## [2.0.3] - 2026-03-31
 
 ### Fixed
