@@ -3,11 +3,20 @@ LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 BINARY  := splunk-cli
 CMD     := .
 
-.PHONY: build test vet lint check build-all clean \
+# macOS Developer ID signing / notarization (see nlink-jp/.github
+# CONVENTIONS.md §Code Signing). Defaults match any Developer ID
+# Application cert in the keychain and the org-standard notary
+# profile. Builds without these fall back to ad-hoc / un-notarized
+# with a one-line warning — see scripts/codesign-darwin.sh.
+CODESIGN_IDENTITY ?= Developer ID Application
+NOTARY_PROFILE    ?= nlink-jp-notary
+
+.PHONY: build test vet lint check build-all package clean \
         splunk-up splunk-down integration-test
 
 build: _dist
 	go build $(LDFLAGS) -o dist/$(BINARY) $(CMD)
+	@scripts/codesign-darwin.sh dist/$(BINARY) "$(CODESIGN_IDENTITY)"
 
 test:
 	go test ./...
@@ -30,6 +39,27 @@ build-all: _dist
 		lipo -create -output dist/$(BINARY)-darwin-universal \
 			dist/$(BINARY)-darwin-amd64 dist/$(BINARY)-darwin-arm64; \
 		echo "Universal macOS binary: dist/$(BINARY)-darwin-universal"; \
+	fi
+	@scripts/codesign-darwin.sh dist/$(BINARY)-darwin-amd64 "$(CODESIGN_IDENTITY)"
+	@scripts/codesign-darwin.sh dist/$(BINARY)-darwin-arm64 "$(CODESIGN_IDENTITY)"
+	@if [ -f dist/$(BINARY)-darwin-universal ]; then \
+		scripts/codesign-darwin.sh dist/$(BINARY)-darwin-universal "$(CODESIGN_IDENTITY)"; \
+	fi
+
+## package: Build all platforms, zip with version suffix + README, notarize darwin → dist/
+package: build-all
+	@cd dist && for f in $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 $(BINARY)-darwin-amd64 $(BINARY)-darwin-arm64 $(BINARY)-darwin-universal $(BINARY)-windows-amd64.exe; do \
+		[ -f "$$f" ] || continue; \
+		suffix=$${f#$(BINARY)-}; \
+		suffix=$${suffix%%.exe}; \
+		cp ../README.md .; \
+		zip -j "$(BINARY)-$(VERSION)-$${suffix}.zip" "$$f" README.md; \
+		rm -f README.md; \
+	done
+	@scripts/notarize-darwin.sh dist/$(BINARY)-$(VERSION)-darwin-amd64.zip "$(NOTARY_PROFILE)"
+	@scripts/notarize-darwin.sh dist/$(BINARY)-$(VERSION)-darwin-arm64.zip "$(NOTARY_PROFILE)"
+	@if [ -f dist/$(BINARY)-$(VERSION)-darwin-universal.zip ]; then \
+		scripts/notarize-darwin.sh dist/$(BINARY)-$(VERSION)-darwin-universal.zip "$(NOTARY_PROFILE)"; \
 	fi
 
 _dist:
