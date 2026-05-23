@@ -111,8 +111,38 @@ Global flags:
       --insecure                Skip TLS certificate verification
       --http-timeout duration   Per-request HTTP timeout (e.g. 30s, 2m)
       --debug                   Enable verbose debug logging
+      --prepend string          SPL prepend mode: auto | pipe-only (default) | off
   -v, --version                 Print version information
 ```
+
+### SPL prepend mode
+
+By default, splunk-cli wraps your SPL with a leading `search ` command
+unless it starts with `|`. This means **typing `search index=foo`
+yourself produces a doubled `search search index=foo`**, which Splunk
+parses as "search command + literal token search + index=foo" and
+typically returns no results. Three modes are available:
+
+| Mode | When `search ` is added | Notes |
+|---|---|---|
+| `pipe-only` (default) | unless input starts with `\|` | Historical behavior; backward compatible. |
+| `auto` | unless input starts with `\|` **or** with the `search` command (followed by whitespace / EOF) | Convenient when pasting from Splunk Web. Does **not** detect macros that expand to a leading command. |
+| `off` | never | You supply a complete SPL, including any leading command. |
+
+Set per-invocation:
+
+```bash
+splunk-cli run --prepend auto --spl 'search index=foo | stats count'
+```
+
+Or set the default in `~/.config/splunk-cli/config.toml`:
+
+```toml
+[splunk]
+prepend = "auto"
+```
+
+Priority: CLI flag > config file > built-in default (`pipe-only`).
 
 ### `run` — Synchronous search
 

@@ -111,8 +111,34 @@ splunk-cli [command]
       --insecure                TLS 証明書検証をスキップ
       --http-timeout duration   リクエストごとの HTTP タイムアウト（例: 30s, 2m）
       --debug                   デバッグログを有効化
+      --prepend string          SPL 自動補完モード: auto | pipe-only（デフォルト）| off
   -v, --version                 バージョン情報を表示
 ```
+
+### SPL 自動補完モード
+
+splunk-cli はデフォルトでユーザの SPL の先頭に `search ` を自動付与します（`|` 始まりは除く）。このため **自分で `search index=foo` と書くと `search search index=foo` になり**、Splunk は 2 番目の `search` をリテラルトークン検索として解釈する結果、ほぼ常に空ヒットになります。3 つのモードを選べます。
+
+| モード | `search ` を付与する条件 | 備考 |
+|---|---|---|
+| `pipe-only`（デフォルト） | 入力が `\|` で始まらない場合 | 従来動作。後方互換維持。 |
+| `auto` | 入力が `\|` で始まらず、かつ `search` コマンド（後ろが空白 / 末尾）で始まらない場合 | Splunk Web からのコピペに親切。マクロが先頭コマンドに展開されるケースは検出できない。 |
+| `off` | 付与しない | 完全な SPL を自分で書く必要があります（先頭 `search` / 生成コマンド / `\|` を含む）。 |
+
+実行ごとに指定:
+
+```bash
+splunk-cli run --prepend auto --spl 'search index=foo | stats count'
+```
+
+または `~/.config/splunk-cli/config.toml` でデフォルト指定:
+
+```toml
+[splunk]
+prepend = "auto"
+```
+
+優先順位: CLI フラグ > 設定ファイル > 組み込みデフォルト（`pipe-only`）
 
 ### `run` — 同期検索
 

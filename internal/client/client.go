@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/nlink-jp/splunk-cli/internal/config"
+	splpkg "github.com/nlink-jp/splunk-cli/internal/spl"
 )
 
 const (
@@ -154,11 +155,7 @@ func (c *Client) StartSearch(ctx context.Context, spl, earliest, latest string) 
 	c.debugf("POST %s\n", endpoint)
 
 	form := url.Values{}
-	if !strings.HasPrefix(strings.TrimSpace(spl), "|") {
-		form.Set("search", "search "+spl)
-	} else {
-		form.Set("search", spl)
-	}
+	form.Set("search", splpkg.Wrap(spl, c.cfg.Prepend))
 	if earliest != "" {
 		form.Set("earliest_time", earliest)
 	}

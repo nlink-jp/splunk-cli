@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/nlink-jp/splunk-cli/internal/spl"
 )
 
 // Stderr is the writer for warnings. Overridable in tests.
@@ -28,6 +30,7 @@ type Config struct {
 	HTTPTimeout time.Duration
 	Limit       int
 	Debug       bool
+	Prepend     spl.PrependMode
 }
 
 // tomlConfig mirrors the TOML file structure.
@@ -45,6 +48,7 @@ type tomlSplunk struct {
 	Insecure    bool   `toml:"insecure"`
 	HTTPTimeout string `toml:"http_timeout"`
 	Limit       int    `toml:"limit"`
+	Prepend     string `toml:"prepend"`
 }
 
 // DefaultPath returns the default config file path.
@@ -60,6 +64,7 @@ func DefaultPath() string {
 // A missing file is not an error — the returned Config will have zero values.
 func Load(path string) (Config, error) {
 	var cfg Config
+	cfg.Prepend = spl.DefaultMode
 
 	if path == "" {
 		path = DefaultPath()
@@ -97,6 +102,12 @@ func Load(path string) (Config, error) {
 		}
 		cfg.HTTPTimeout = d
 	}
+
+	mode, err := spl.ParseMode(s.Prepend)
+	if err != nil {
+		return cfg, fmt.Errorf("config: %w", err)
+	}
+	cfg.Prepend = mode
 
 	return cfg, nil
 }

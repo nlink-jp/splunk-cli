@@ -26,3 +26,20 @@ token = ""
 
 # Maximum results to return per run/results command (0 = all)
 # limit = 0
+
+# How splunk-cli wraps the SPL you submit:
+#   "pipe-only" (default) — prepend "search " unless the SPL starts with "|".
+#                           Matches the historical behavior; if you write
+#                           `search index=foo`, the submitted SPL becomes
+#                           `search search index=foo` (Splunk treats the
+#                           second `search` as a literal token to match).
+#   "auto"                — also skip the prefix when the SPL already starts
+#                           with the `search` command (followed by a space
+#                           or end of string). Convenient if you paste from
+#                           Splunk Web; does not protect against macros that
+#                           expand to a leading command.
+#   "off"                 — never prepend. You must supply a complete SPL,
+#                           including any leading `search` or generating
+#                           command.
+# Override per-invocation with `--prepend auto|pipe-only|off`.
+# prepend = "pipe-only"

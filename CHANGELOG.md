@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`--prepend` flag and `prepend` config field** for choosing how SPL
+  is wrapped before submission. Three modes:
+  - `pipe-only` (default, historical behavior): prepend `search ` unless
+    the SPL starts with `|`.
+  - `auto`: also skip the prefix when the SPL already starts with the
+    `search` command (followed by whitespace or end-of-string). Avoids
+    the doubled-`search` artifact when a user pastes `search index=foo`
+    from Splunk Web. Does not detect macros that expand to a leading
+    command — use `off` for that.
+  - `off`: never prepend; the caller supplies a complete SPL.
+
+  Precedence: `--prepend` CLI flag > `[splunk] prepend` in config file
+  > built-in default (`pipe-only`). Default is unchanged from prior
+  versions, so existing workflows are unaffected. Addresses
+  https://github.com/nlink-jp/splunk-cli/issues/4.
+
+### Changed
+
+- The auto-prepend logic moves into the new `internal/spl` package as
+  a pure `Wrap(spl, mode)` helper, and the Splunk client now delegates
+  to it instead of inlining the rule. No observable change at the
+  default mode.
+
 ## [2.0.4] - 2026-05-22
 
 ### Added

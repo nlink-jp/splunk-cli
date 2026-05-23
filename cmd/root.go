@@ -11,6 +11,7 @@ import (
 
 	"github.com/nlink-jp/splunk-cli/internal/client"
 	"github.com/nlink-jp/splunk-cli/internal/config"
+	"github.com/nlink-jp/splunk-cli/internal/spl"
 )
 
 // cfg holds the runtime configuration, built by loadConfig in PersistentPreRunE.
@@ -29,6 +30,7 @@ var (
 	flagHTTPTimeout time.Duration
 	flagDebug       bool
 	flagLimit       int
+	flagPrepend     string
 )
 
 var rootCmd = &cobra.Command{
@@ -52,6 +54,7 @@ func init() {
 	pf.DurationVar(&flagHTTPTimeout, "http-timeout", 0, "Per-request HTTP timeout (e.g. 30s, 2m)")
 	pf.BoolVar(&flagDebug, "debug", false, "Enable verbose debug logging")
 	pf.IntVar(&flagLimit, "limit", 0, "Max results to return (0 = all)")
+	pf.StringVar(&flagPrepend, "prepend", "", `SPL prepend mode: "auto" | "pipe-only" (default) | "off"`)
 }
 
 // Execute runs the root command.
@@ -101,6 +104,13 @@ func loadConfig(_ *cobra.Command, _ []string) error {
 	}
 	if pf.Changed("limit") {
 		cfg.Limit = flagLimit
+	}
+	if pf.Changed("prepend") {
+		mode, err := spl.ParseMode(flagPrepend)
+		if err != nil {
+			return err
+		}
+		cfg.Prepend = mode
 	}
 	return nil
 }
