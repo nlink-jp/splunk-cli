@@ -52,8 +52,12 @@ package: build-all
 		[ -f "$$f" ] || continue; \
 		suffix=$${f#$(BINARY)-}; \
 		suffix=$${suffix%%.exe}; \
+		case "$$f" in *.exe) ext=.exe ;; *) ext= ;; esac; \
 		cp ../README.md .; \
-		zip -j "$(BINARY)-$(VERSION)-$${suffix}.zip" "$$f" README.md; \
+		stage="$$(dirname "$$f")/_pkg"; rm -rf "$$stage"; mkdir -p "$$stage"; \
+		cp "$$f" "$$stage/$(BINARY)$$ext"; \
+		zip -j "$(BINARY)-$(VERSION)-$${suffix}.zip" "$$stage/$(BINARY)$$ext" README.md; \
+		rm -rf "$$stage"; \
 		rm -f README.md; \
 	done
 	@scripts/notarize-darwin.sh dist/$(BINARY)-$(VERSION)-darwin-amd64.zip "$(NOTARY_PROFILE)"
