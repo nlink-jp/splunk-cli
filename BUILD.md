@@ -18,8 +18,9 @@ make build-all   # cross-compile → dist/
 make clean       # remove artifacts
 ```
 
-Cross-compiled targets: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64,
-darwin universal (lipo), windows/amd64.
+Cross-compiled targets: linux/amd64, linux/arm64, darwin/arm64, windows/amd64.
+macOS ships arm64 only (Apple Silicon) — no Intel or universal (lipo) binary;
+Intel Mac users can build from source.
 
 ## Unit Tests
 
